@@ -4,22 +4,22 @@ import { User } from '../../users/entities/user.entity';
 @Entity('attendance_logs')
 export class Attendance {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number; // 👈 Added ! here
 
   @Column({ type: 'timestamp' })
-  checkIn: Date;
+  checkIn!: Date; // 👈 Added ! here
 
   @Column({ type: 'timestamp', nullable: true })
-  checkOut: Date;
+  checkOut!: Date | null; // 👈 Added ! and | null here
 
   @Column({ default: 'Present' })
-  status: string;
+  status!: string; // 👈 Added ! here
 
-  // 👈 New column for storing calculated work duration
+  // New column for storing calculated work duration
   @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  totalHours: number;
+  totalHours!: number | null; // 👈 Added ! and | null here
 
   @ManyToOne(() => User, (user) => user.id, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
-  user: User;
+  user!: User; // 👈 Added ! here
 }
