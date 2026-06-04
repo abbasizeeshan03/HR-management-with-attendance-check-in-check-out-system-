@@ -1,83 +1,121 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, Between } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
-import { User } from '../users/entities/user.entity';
 import { CreateAttendanceDto } from './dto/create-attendance.dto';
+
 
 @Injectable()
 export class AttendanceService {
   constructor(
     @InjectRepository(Attendance)
-    private attendanceRepository: Repository<Attendance>,
-    
-    @InjectRepository(User)
-    private usersRepository: Repository<User>,
+    private readonly attendanceRepo: Repository<Attendance>,
   ) {}
 
-  async checkIn(createAttendanceDto: CreateAttendanceDto): Promise<Attendance> {
-    // 1. Verify if the employee exists
-    const user = await this.usersRepository.findOne({ where: { id: createAttendanceDto.userId } });
-    if (!user) {
-      throw new NotFoundException(`Employee with ID ${createAttendanceDto.userId} not found`);
-    }
 
-    // 2. SAFETY GUARD: Check if the employee is already checked in
-    const activeCheckIn = await this.attendanceRepository.findOne({
-      where: {
-        user: { id: createAttendanceDto.userId },
-        checkOut: IsNull(), // Looks for any open shift
-      },
-    });
-
-    if (activeCheckIn) {
-      throw new BadRequestException(`Employee is already checked in! Please check out first.`);
-    }
-
-    // 3. Create a new log entry if clear
-    const log = this.attendanceRepository.create({
-      user: user,
-      checkIn: new Date(),
-      status: 'Present',
-    });
-
-    return await this.attendanceRepository.save(log);
+  findAll(): Promise<Attendance[]> {
+    return this.attendanceRepo.find({ order: { checkIn: 'DESC' } });
   }
 
-  async findAll(): Promise<Attendance[]> {
-    return await this.attendanceRepository.find({
-      relations: {
-        user: true,
-      },
-    });
-  }
-
-  async checkOut(createAttendanceDto: CreateAttendanceDto): Promise<Attendance> {
-    // 1. Find the active check-in
-    const activeLog = await this.attendanceRepository.findOne({
-      where: {
-        user: { id: createAttendanceDto.userId },
-        checkOut: IsNull(),
-      },
+  findByUser(userId: number): Promise<Attendance[]> {
+    return this.attendanceRepo.find({
+      where: { userId },
       order: { checkIn: 'DESC' },
     });
+  }
 
-    if (!activeLog) {
-      throw new NotFoundException(`No active check-in found for employee ID ${createAttendanceDto.userId}`);
+ 
+  async checkIn(dto: CreateAttendanceDto): Promise<Attendance> {
+    const { userId } = dto;
+
+  
+    const openShift = await this.attendanceRepo.findOne({
+      where: {
+        userId,
+        checkOut: null,
+      },
+    });
+
+    if (openShift) {
+      throw new BadRequestException(
+        'Employee is already checked in! Please check out first.',
+      );
     }
 
-    // 2. Set the checkout timestamp
-    const checkoutTime = new Date();
-    activeLog.checkOut = checkoutTime;
+  
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
-    // 3. MATH TIME: Calculate time difference in hours
-    const diffInMilliseconds = checkoutTime.getTime() - activeLog.checkIn.getTime();
-    const diffInHours = diffInMilliseconds / (1000 * 60 * 60); // Converts ms to decimal hours
-    
-    // Round it cleanly to 2 decimal places (e.g., 8.25 hours)
-    activeLog.totalHours = Math.round(diffInHours * 100) / 100;
+    const todayCheckIn = await this.attendanceRepo.findOne({
+      where: {
+        userId,
+        checkIn: Between(todayStart, todayEnd),
+        checkOut: null,
+      },
+    });
 
-    // 4. Save and return updated log entry
-    return await this.attendanceRepository.save(activeLog);
+    if (todayCheckIn) {
+      throw new BadRequestException(
+        'Employee has already checked in today!',
+      );
+    }
+
+    const checkInTime = new Date();
+
+    // Define late threshold (e.g., 9:00 AM)
+    const expectedStartTime = new Date(checkInTime);
+    expectedStartTime.setHours(9, 0, 0, 0);
+
+    const isLate = checkInTime > expectedStartTime;
+    const lateMinutes = isLate
+      ? Math.floor((checkInTime.getTime() - expectedStartTime.getTime()) / (1000 * 60))
+      : 0;
+
+    const status = isLate ? 'late' : 'present';
+
+    const attendance = this.attendanceRepo.create({
+      userId,
+      checkIn: checkInTime,
+      checkOut: null,
+      status,
+      totalHours: 0,
+      lateMinutes,
+    });
+
+    return this.attendanceRepo.save(attendance);
+  }
+
+  
+  async checkOut(userId: number): Promise<Attendance> {
+    const openShift = await this.attendanceRepo.findOne({
+      where: {
+        userId,
+        checkOut: null,
+      },
+    });
+
+    if (!openShift) {
+      throw new BadRequestException(
+        'No active check-in found! Please check in first.',
+      );
+    }
+
+    const checkOutTime = new Date();
+    openShift.checkOut = checkOutTime;
+
+   
+    const diffMs = checkOutTime.getTime() - openShift.checkIn!.getTime();
+    const totalHours = diffMs / (1000 * 60 * 60);
+    openShift.totalHours = Math.round(totalHours * 100) / 100; 
+
+    openShift.status = openShift.status === 'late' ? 'late' : 'present';
+
+    return this.attendanceRepo.save(openShift);
   }
 }
