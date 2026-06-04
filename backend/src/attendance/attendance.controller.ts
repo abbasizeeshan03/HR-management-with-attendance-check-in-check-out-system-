@@ -10,14 +10,21 @@ export class AttendanceController {
   create(@Body() createAttendanceDto: CreateAttendanceDto) {
     return this.attendanceService.checkIn(createAttendanceDto);
   }
-
-  @Post('checkout') // 👈 This maps to: http://localhost:3000/attendance/checkout
-  checkOut(@Body() createAttendanceDto: CreateAttendanceDto) {
-    return this.attendanceService.checkOut(createAttendanceDto);
+  
+  @Post('checkout')
+  checkOut(@Body() dto: { userId: number }) {
+    return this.attendanceService.checkOut(dto.userId);
   }
 
+ 
   @Get()
   findAll() {
     return this.attendanceService.findAll();
+  }
+
+ 
+  @Get('user/:userId')
+  findByUser(@Body() dto: { userId: number }) {
+    return this.attendanceService.findByUser(dto.userId);
   }
 }
