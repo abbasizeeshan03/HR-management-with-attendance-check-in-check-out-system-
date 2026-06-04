@@ -1,13 +1,11 @@
 import {
   Injectable,
-  NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
 import { CreateAttendanceDto } from './dto/create-attendance.dto';
-
 
 @Injectable()
 export class AttendanceService {
@@ -16,23 +14,20 @@ export class AttendanceService {
     private readonly attendanceRepo: Repository<Attendance>,
   ) {}
 
-
   findAll(): Promise<Attendance[]> {
     return this.attendanceRepo.find({ order: { checkIn: 'DESC' } });
   }
 
   findByUser(userId: number): Promise<Attendance[]> {
     return this.attendanceRepo.find({
-      where: { userId },
+      where: { userId: Number(userId) },
       order: { checkIn: 'DESC' },
     });
   }
 
- 
   async checkIn(dto: CreateAttendanceDto): Promise<Attendance> {
-    const { userId } = dto;
+    const userId = Number(dto.userId);
 
-  
     const openShift = await this.attendanceRepo.findOne({
       where: {
         userId,
@@ -46,7 +41,6 @@ export class AttendanceService {
       );
     }
 
-  
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
@@ -61,14 +55,10 @@ export class AttendanceService {
     });
 
     if (todayCheckIn) {
-      throw new BadRequestException(
-        'Employee has already checked in today!',
-      );
+      throw new BadRequestException('Employee has already checked in today!');
     }
 
     const checkInTime = new Date();
-
-    // Define late threshold (e.g., 9:00 AM)
     const expectedStartTime = new Date(checkInTime);
     expectedStartTime.setHours(9, 0, 0, 0);
 
@@ -91,11 +81,12 @@ export class AttendanceService {
     return this.attendanceRepo.save(attendance);
   }
 
-  
   async checkOut(userId: number): Promise<Attendance> {
+    const id = Number(userId);
+
     const openShift = await this.attendanceRepo.findOne({
       where: {
-        userId,
+        userId: id,
         checkOut: null,
       },
     });
@@ -109,10 +100,12 @@ export class AttendanceService {
     const checkOutTime = new Date();
     openShift.checkOut = checkOutTime;
 
-   
-    const diffMs = checkOutTime.getTime() - openShift.checkIn!.getTime();
-    const totalHours = diffMs / (1000 * 60 * 60);
-    openShift.totalHours = Math.round(totalHours * 100) / 100; 
+    if (!openShift.checkIn) {
+      throw new BadRequestException('Check-in time is missing.');
+    }
+
+    const diffMs = checkOutTime.getTime() - openShift.checkIn.getTime();
+    openShift.totalHours = Math.round((diffMs / (1000 * 60 * 60)) * 100) / 100;
 
     openShift.status = openShift.status === 'late' ? 'late' : 'present';
 
