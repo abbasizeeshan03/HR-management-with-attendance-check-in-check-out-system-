@@ -1,14 +1,16 @@
-import { Controller, Get, Post, Body } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { CreateAttendanceDto } from './dto/create-attendance.dto';
 
 @Controller('attendance')
 export class AttendanceController {
-  constructor(private readonly attendanceService: AttendanceService) {}
+  constructor(private readonly attendanceService:
+AttendanceService) {}
 
   @Post()
   create(@Body() createAttendanceDto: CreateAttendanceDto) {
-    return this.attendanceService.checkIn(createAttendanceDto);
+    return 
+this.attendanceService.checkIn(createAttendanceDto);
   }
   
   @Post('checkout')
@@ -24,7 +26,8 @@ export class AttendanceController {
 
  
   @Get('user/:userId')
-  findByUser(@Body() dto: { userId: number }) {
-    return this.attendanceService.findByUser(dto.userId);
-  }
+  findByUser(@Param('userId') userId: string) {
+  return 
+this.attendanceService.findByUser(Number(userId));
+ }
 }
