@@ -15,7 +15,7 @@ export class Attendance {
   checkOut: Date | null;
 
   @Column({ default: 'incomplete' })
-  status: string;
+  status: 'present' | 'late' | 'absent' | 'incomplete';
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   totalHours: number;
